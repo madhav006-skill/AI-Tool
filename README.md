@@ -1,7 +1,17 @@
 # 🤖 JARVIS - React + Node.js Migration
 
 ## Overview
-Complete migration from Python/Streamlit to production-ready React (frontend) + Node.js/Express (backend) architecture with full conversation memory support.
+Complete migration from Python/Streamlit to production-ready React (frontend) + Node.js/Express (backend) architecture with full conversation memory support and YouTube voice command integration.
+
+## ✨ Key Features
+
+- **🎙️ Voice Control**: Natural language voice commands in English & Hinglish
+- **🎵 YouTube Integration**: Voice-activated YouTube search and playback
+- **🧠 Conversation Memory**: Context-aware responses with full conversation history
+- **🌏 Multilingual**: English, Hindi, and Hinglish support
+- **🎭 Emotion Detection**: Emotion-aware voice responses
+- **⚡ Real-time**: Instant command detection and execution
+- **🔒 Secure**: Client-side command processing, no data leakage
 
 ## Project Structure
 
@@ -27,8 +37,12 @@ jarvis-app/
     │   ├── App.jsx            # Main component
     │   ├── services/
     │   │   ├── apiService.js          # API communication
+    │   │   ├── commandService.js      # YouTube command detection
     │   │   ├── voiceInputService.js   # Microphone input
     │   │   └── voiceOutputService.js  # Text-to-speech
+    │   ├── utils/
+    │   │   ├── normalizeSpeech.js     # ASR error correction
+    │   │   └── youtubeHandler.js      # YouTube integration
     │   └── styles/
     │       └── index.css      # Styling
 ```
@@ -57,6 +71,54 @@ Response:
   "isTask": false
 }
 ```
+
+## 🎵 YouTube Voice Command Integration
+
+### Features
+- **Natural Language**: "play arijit singh music" or "youtube pe tum hi ho chala"
+- **Smart Detection**: Automatically detects YouTube intent from voice/text
+- **Keyword Extraction**: Intelligently extracts artist names and song titles
+- **Bilingual Support**: Works with English and Hinglish commands
+- **Friendly Feedback**: Natural, conversational voice responses
+- **Browser Integration**: Opens YouTube in new tab with search results
+
+### Example Commands
+
+**English:**
+```
+"play arijit singh music"
+"open youtube and play tum hi ho"
+"search badshah on youtube"
+```
+
+**Hinglish:**
+```
+"jarvis youtube pe tum hi ho chala"
+"youtube pe arijit singh ke gaane lagao"
+"yaar youtube pe badshah suna"
+```
+
+### How It Works
+
+```
+Voice Input
+    ↓
+Speech Recognition (hi-IN)
+    ↓
+normalizeSpeech() - Fix ASR errors
+    ↓
+detectYouTubeCommand() - Intent detection
+    ↓
+extractQuery() - Get artist/song
+    ↓
+getYouTubeVoiceFeedback() - Natural response
+    ↓
+Speak feedback (TTS)
+    ↓
+Open YouTube in new tab
+```
+
+**See [YOUTUBE_INTEGRATION.md](YOUTUBE_INTEGRATION.md) for complete documentation.**
 
 #### 2. **POST /api/language-detect**
 Detect language from text

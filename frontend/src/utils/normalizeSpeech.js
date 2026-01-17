@@ -48,15 +48,47 @@ const NORMALIZATION_MAP = {
   kholo: "kholo",
   chala: "chala",
   chalao: "chala",
+  chalaa: "chala",
+  chalado: "chala do",
   lagao: "lagao",
+  lagaa: "laga",
   search: "search",
   karo: "karo",
+  
+  // YouTube command variations
+  "play": "play",
+  "ple": "play",
+  "plae": "play",
+  "plai": "play",
+  
+  // Common artist names
+  "arijit": "arijit",
+  "arijeet": "arijit",
+  "arijeeth": "arijit",
+  "arjit": "arijit",
+  "atif": "atif",
+  "ateef": "atif",
+  "shreya": "shreya",
+  "shriya": "shreya",
+  "sonu": "sonu",
+  "neha": "neha",
+  "badshah": "badshah",
+  "badshaah": "badshah",
+  "jubin": "jubin",
   
   // English words often mispronounced
   song: "song",
   songs: "songs",
   gaane: "gaane",
-  gaana: "gaana"
+  gaana: "gaana",
+  
+  // Common Hindi/Hinglish words
+  "achha": "achha",
+  "acha": "achha",
+  "theek": "theek",
+  "thik": "theek",
+  "yaar": "yaar",
+  "yar": "yaar"
 };
 
 export function normalizeSpeech(text = "") {

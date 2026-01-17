@@ -3,6 +3,7 @@ import apiService from './services/apiService';
 import VoiceInputService from './services/voiceInputService';
 import VoiceOutputService from './services/voiceOutputService';
 import { detectYouTubeCommand, buildYouTubeUrl } from './services/commandService';
+import { getYouTubeVoiceFeedback, openYouTube } from './utils/youtubeHandler';
 import './styles/index.css';
 
 function App() {
@@ -173,47 +174,59 @@ function App() {
       // 1) COMMAND LAYER (YouTube only) - must NOT hit backend
       const cmd = detectYouTubeCommand(message);
       if (cmd.type === 'command' && cmd.commandName === 'youtube_play') {
-        const url = buildYouTubeUrl(cmd.query);
         console.log('[COMMAND] YouTube detected:', cmd);
-        window.open(url, '_blank', 'noopener,noreferrer');
-
+        
+        // Build YouTube URL
+        const url = buildYouTubeUrl(cmd.query);
+        
+        // Get natural voice feedback based on language
+        const language = cmd.language || detectedLang || 'en';
+        const voiceFeedback = getYouTubeVoiceFeedback(cmd.query, language);
+        
+        // Add to conversation history
         const userMsg = message;
         const assistantMsg = cmd.query
-          ? `Opening YouTube search for: ${cmd.query}`
-          : 'Opening YouTube.';
+          ? `🎵 ${voiceFeedback}`
+          : (language === 'hinglish' ? '🎵 YouTube khol raha hoon' : '🎵 Opening YouTube');
 
         const updatedHistory = [...conversationHistory, { user: userMsg, assistant: assistantMsg }];
         setConversationHistory(updatedHistory);
         setUserInput('');
         setRecognizedText('');
 
+        // Speak natural feedback BEFORE opening YouTube
         if (voiceEnabled && voiceOutputRef.current) {
-          // For Hinglish voice, keep hi-IN; for English keep en-US
-          const langMode = detectedLang === 'hinglish' ? 'hi' : 'en';
-          const detectedMode = detectedLang === 'hinglish' ? 'hinglish' : 'en';
+          const langMode = language === 'hinglish' ? 'hi' : 'en';
+          const detectedMode = language === 'hinglish' ? 'hinglish' : 'en';
+          
+          setIsAssistantSpeaking(true);
           try {
             await voiceOutputRef.current.speak(
-              cmd.query
-                ? (detectedLang === 'hinglish'
-                    ? `Theek hai, YouTube pe ${cmd.query} chala raha hoon.`
-                    : `Okay, playing ${cmd.query} on YouTube.`)
-                : (detectedLang === 'hinglish'
-                    ? 'Theek hai, YouTube khol raha hoon.'
-                    : 'Okay, opening YouTube.'),
+              voiceFeedback,
               langMode,
-              { detectedLanguage: detectedMode, emotion: 'calm', emotionIntensity: 'low' }
+              { 
+                detectedLanguage: detectedMode, 
+                emotion: 'excited', 
+                emotionIntensity: 'medium' 
+              }
             );
           } catch (err) {
             console.error('[COMMAND] TTS error:', err);
           } finally {
-            if (voiceInputRef.current && voiceInputRef.current.resetAfterResponse) {
-              voiceInputRef.current.resetAfterResponse();
-            }
+            setIsAssistantSpeaking(false);
           }
-        } else {
-          if (voiceInputRef.current && voiceInputRef.current.resetAfterResponse) {
-            voiceInputRef.current.resetAfterResponse();
-          }
+        }
+
+        // Open YouTube after voice feedback
+        const opened = openYouTube(url);
+        if (!opened) {
+          console.warn('[COMMAND] Failed to open YouTube - popup may be blocked');
+          setError('Could not open YouTube. Please allow popups for this site.');
+        }
+
+        // Reset voice input
+        if (voiceInputRef.current && voiceInputRef.current.resetAfterResponse) {
+          voiceInputRef.current.resetAfterResponse();
         }
 
         return; // IMPORTANT: do not send command to backend

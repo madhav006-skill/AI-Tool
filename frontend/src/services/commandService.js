@@ -1,10 +1,11 @@
 /**
- * Command Service - YouTube integration only
+ * Command Service - YouTube integration with enhanced voice command support
  * Detect YouTube-related commands and return:
  * {
  *   type: "command" | "conversation",
  *   commandName?: "youtube_play",
- *   query?: string
+ *   query?: string,
+ *   language?: "en" | "hinglish"
  * }
  */
 
@@ -25,51 +26,127 @@ function removeWakeWord(text) {
   );
 }
 
+/**
+ * Detect if text contains YouTube intent keywords
+ */
 function looksLikeYouTubeIntent(text) {
   const t = (text || '').toLowerCase();
-  return (
+  
+  // YouTube tokens (English + Hindi/Hinglish)
+  const hasYouTubeToken = (
     /\byoutube\b/.test(t) ||
     /\byt\b/.test(t) ||
-    /[\u0900-\u097F]/.test(text) && /(यूट्यूब|यूटूब)/.test(text)
+    /\byutub\b/.test(t) ||
+    /\bytub\b/.test(t) ||
+    ((/[\u0900-\u097F]/.test(text)) && /(यूट्यूब|यूटूब)/.test(text))
   );
+  
+  if (hasYouTubeToken) return true;
+  
+  // Also check for "play on youtube" pattern even without explicit "youtube" word
+  // This handles: "play arijit singh music" if context suggests video playback
+  const hasPlayIntent = (
+    /\b(play|chala|chalao|chala do|lagao|laga|suno|sunao)\b/.test(t)
+  );
+  
+  const hasVideoContext = (
+    /\b(video|song|songs|music|gaana|gaane)\b/.test(t)
+  );
+  
+  // Only return true if both play intent AND video context exist
+  // This prevents false positives like "play game"
+  return hasPlayIntent && hasVideoContext;
 }
 
+/**
+ * Extract search query from YouTube command
+ * Removes command verbs, YouTube tokens, and filler words
+ * Returns clean search keywords (artist/song name)
+ */
 function extractQuery(rawText) {
   let text = removeWakeWord(rawText);
 
-  // Remove obvious YouTube tokens (English + Hindi)
+  // Remove YouTube tokens (English + Hindi variants)
   text = text
     .replace(/\byoutube\b/gi, ' ')
     .replace(/\byt\b/gi, ' ')
+    .replace(/\byutub\b/gi, ' ')
+    .replace(/\bytub\b/gi, ' ')
     .replace(/यूट्यूब/gi, ' ')
     .replace(/यूटूब/gi, ' ');
 
-  // Remove common intent verbs/phrases in English
+  // Remove intent verbs (English)
   text = text
     .replace(/\b(open|kholo|khol|start|launch)\b/gi, ' ')
-    .replace(/\b(play|chala|chalao|chala do|chala de|lagao)\b/gi, ' ')
-    .replace(/\b(search|find|look\s*up|dhoond|dhundo|dhundho)\b/gi, ' ')
-    .replace(/\b(on)\b/gi, ' ')
-    .replace(/\b(pe|par)\b/gi, ' ')
-    .replace(/\b(ke|ki|ka)\b/gi, ' ')
-    .replace(/\b(gaane|song|songs|music)\b/gi, ' ');
+    .replace(/\b(play|chala|chalao|chala do|chala de|lagao|laga|lagaa)\b/gi, ' ')
+    .replace(/\b(search|find|look\s*up|dhoond|dhundo|dhundho|dekh|dekho)\b/gi, ' ')
+    .replace(/\b(suno|sunao|sun|suna)\b/gi, ' ');
+
+  // Remove position words
+  text = text
+    .replace(/\b(on|in|pe|par|mein|main)\b/gi, ' ');
+
+  // Remove possessive markers and articles
+  text = text
+    .replace(/\b(ke|ki|ka|ko|se|ne)\b/gi, ' ')
+    .replace(/\b(a|an|the)\b/gi, ' ');
+
+  // Remove "music/song/video" category words ONLY if other keywords remain
+  // This preserves "arijit singh music" -> "arijit singh"
+  // But keeps "music" if that's all that's left
+  const beforeMusicRemoval = text.trim();
+  text = text
+    .replace(/\b(gaane|gaana|song|songs|music|video|videos)\b/gi, ' ');
+  
+  const afterMusicRemoval = text.trim();
+  // If removing music words left nothing, restore the original
+  if (!afterMusicRemoval && beforeMusicRemoval) {
+    text = beforeMusicRemoval;
+  }
 
   // Remove common Hindi/Devanagari verbs
   text = text
-    .replace(/(खोलो|खोल|चलाओ|चला|चला दो|खोज|खोजो|सर्च|ढूंढो|ढूंढ)/g, ' ')
-    .replace(/(पर|पे|में|का|की|के)/g, ' ');
+    .replace(/(खोलो|खोल|चलाओ|चला|चला दो|खोज|खोजो|सर्च|ढूंढो|ढूंढ|सुनो|सुना)/g, ' ')
+    .replace(/(पर|पे|में|का|की|के|को|से|ने)/g, ' ');
 
-  // Remove filler words
+  // Remove filler words and common expressions
   text = text
-    .replace(/\b(please|pls|plz|jarvis)\b/gi, ' ')
-    .replace(/\b(aur|and)\b/gi, ' ');
+    .replace(/\b(please|pls|plz|jarvis|yaar|yar|bhai)\b/gi, ' ')
+    .replace(/\b(aur|and|bhi|toh|also)\b/gi, ' ')
+    .replace(/\b(kuch|some|thoda)\b/gi, ' ');
 
   return stripPunctuationEdges(text);
 }
 
 /**
+ * Detect language mode from the text
+ */
+function detectLanguageMode(text) {
+  const lower = (text || '').toLowerCase();
+  
+  // Check for Devanagari script
+  if (/[\u0900-\u097F]/.test(text)) {
+    return 'hinglish'; // Even Devanagari gets romanized response
+  }
+  
+  // Hinglish keywords
+  const hinglishWords = [
+    'chala', 'chalao', 'kholo', 'khol', 'lagao', 'laga', 'suno', 'sunao',
+    'pe', 'par', 'mein', 'yaar', 'bhai', 'gaana', 'gaane',
+    'kya', 'hai', 'hoon', 'theek', 'achha', 'acha'
+  ];
+  
+  const hasHinglishWords = hinglishWords.some(word => 
+    new RegExp(`\\b${word}\\b`, 'i').test(lower)
+  );
+  
+  return hasHinglishWords ? 'hinglish' : 'en';
+}
+
+/**
  * Detect YouTube command.
  * IMPORTANT: This function is pure and must not call backend/LLM.
+ * Returns command object with type, commandName, query, and language
  */
 export function detectYouTubeCommand(inputText) {
   // Step 1: Normalize common ASR mistakes
@@ -77,19 +154,30 @@ export function detectYouTubeCommand(inputText) {
   const text = normalizeSpaces(normalized);
   if (!text) return { type: 'conversation' };
 
-  // Must include YouTube token OR explicit Hindi token
+  // Step 2: Check for YouTube intent
   if (!looksLikeYouTubeIntent(text)) {
-    // Also allow explicit "play X on youtube" where youtube might be missing (keep scope strict: require youtube)
     return { type: 'conversation' };
   }
 
+  // Step 3: Extract search keywords
   const query = extractQuery(text);
 
-  // If user only said "youtube kholo" etc, query can be empty.
+  // Step 4: Detect language mode
+  const language = detectLanguageMode(text);
+
+  console.log('[YouTube Command]', {
+    original: inputText,
+    normalized: text,
+    query,
+    language
+  });
+
+  // Return command object
   return {
     type: 'command',
     commandName: 'youtube_play',
-    ...(query ? { query } : {})
+    query: query || '', // Empty query = just open YouTube
+    language
   };
 }
 
