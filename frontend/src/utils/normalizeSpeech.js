@@ -1,102 +1,196 @@
 /**
  * Speech Normalization Utility
  * Corrects common ASR misrecognitions for English and Hinglish
+ * MUST be applied BEFORE intent detection
  */
 
 const NORMALIZATION_MAP = {
-  // Common commands
+  // ===== CRITICAL ASR FIXES =====
+  // Play command variations
   ple: "play",
   pley: "play",
   plae: "play",
   plai: "play",
+  pla: "play",
+  plei: "play",
 
+  // YouTube variations (ASR often mangles this)
   yutub: "youtube",
   ytub: "youtube",
   youtub: "youtube",
   yutube: "youtube",
   yuotube: "youtube",
+  utube: "youtube",
+  utub: "youtube",
+  youtoob: "youtube",
+  yootube: "youtube",
+  yootub: "youtube",
 
+  // Music variations
   myoujik: "music",
   myujik: "music",
   myusik: "music",
   musik: "music",
   mjusic: "music",
+  moosic: "music",
+  musick: "music",
+  mujik: "music",
 
+  // Song variations
+  sng: "song",
+  sung: "song",
+  songg: "song",
+  sang: "song",
+  songz: "songs",
+
+  // Singh (common surname)
   sinh: "singh",
   sing: "singh",
   singg: "singh",
+  sigh: "singh",
 
+  // Jarvis/Wake word variations
+  jaarwis: "jarvis",
+  jarwis: "jarvis",
+  jarves: "jarvis",
+  jaavis: "jarvis",
+  jawis: "jarvis",
+  jervis: "jarvis",
+
+  // Hello variations
+  helo: "hello",
+  hallo: "hello",
+  hllo: "hello",
+  ello: "hello",
+
+  // Hi/Ho variations
   hee: "hi",
+  hii: "hi",
   ho: "ho",
-  hon: "on",
-  n: "on",
-  aan: "on",
+  hoo: "ho",
 
-  // Names
+  // On variations
+  hon: "on",
+  aan: "on",
+  onn: "on",
+
+  // ===== ARTIST NAMES =====
   arijit: "arijit",
   arijeet: "arijit",
   arijeeth: "arijit",
   arjit: "arijit",
+  arijith: "arijit",
+  arjeeth: "arijit",
+  
+  atif: "atif",
+  ateef: "atif",
+  aatif: "atif",
+  
+  shreya: "shreya",
+  shriya: "shreya",
+  shrea: "shreya",
+  
+  sonu: "sonu",
+  sonoo: "sonu",
+  
+  neha: "neha",
+  neeha: "neha",
+  
+  badshah: "badshah",
+  badshaah: "badshah",
+  badsha: "badshah",
+  
+  jubin: "jubin",
+  jubeen: "jubin",
 
+  // ===== HINGLISH COMMAND WORDS =====
+  // Tum Hi Ho (popular song)
   tum: "tum",
   tumhee: "tum hi",
   heeho: "hi ho",
+  tumhi: "tum hi",
+  hiho: "hi ho",
   
-  // Additional common words
+  // Position words
   pe: "pe",
   par: "par",
+  pey: "pe",
+  
+  // Action verbs
   kholo: "kholo",
+  kholdo: "khol do",
   chala: "chala",
   chalao: "chala",
   chalaa: "chala",
   chalado: "chala do",
+  chalade: "chala de",
   lagao: "lagao",
   lagaa: "laga",
+  lagado: "laga do",
+  sunao: "sunao",
+  suno: "suno",
+  bajao: "bajao",
+  baja: "baja",
   search: "search",
   karo: "karo",
   
-  // YouTube command variations
-  "play": "play",
-  "ple": "play",
-  "plae": "play",
-  "plai": "play",
+  // Common expressions
+  achha: "achha",
+  acha: "achha",
+  accha: "achha",
+  theek: "theek",
+  thik: "theek",
+  theekhai: "theek hai",
   
-  // Common artist names
-  "arijit": "arijit",
-  "arijeet": "arijit",
-  "arijeeth": "arijit",
-  "arjit": "arijit",
-  "atif": "atif",
-  "ateef": "atif",
-  "shreya": "shreya",
-  "shriya": "shreya",
-  "sonu": "sonu",
-  "neha": "neha",
-  "badshah": "badshah",
-  "badshaah": "badshah",
-  "jubin": "jubin",
+  // Fillers/Address words
+  yaar: "yaar",
+  yar: "yaar",
+  yaaar: "yaar",
+  bhai: "bhai",
+  bhi: "bhi",
+  haan: "haan",
+  han: "haan",
+  ji: "ji",
   
-  // English words often mispronounced
-  song: "song",
-  songs: "songs",
-  gaane: "gaane",
+  // Gaana/Song in Hindi
   gaana: "gaana",
-  
-  // Common Hindi/Hinglish words
-  "achha": "achha",
-  "acha": "achha",
-  "theek": "theek",
-  "thik": "theek",
-  "yaar": "yaar",
-  "yar": "yaar"
+  gana: "gaana",
+  gaane: "gaane",
+  gane: "gaane",
+  gaaney: "gaane"
 };
 
+/**
+ * Normalize ASR output to fix common spelling mistakes
+ * MUST be called BEFORE intent detection and keyword extraction
+ * @param {string} text - Raw ASR output
+ * @returns {string} - Normalized text with corrected spellings
+ */
 export function normalizeSpeech(text = "") {
   if (!text || typeof text !== 'string') return "";
   
+  // Step 1: Lowercase and split
   let words = text.toLowerCase().split(/\s+/);
   
-  words = words.map(word => NORMALIZATION_MAP[word] || word);
+  // Step 2: Apply word-level normalization
+  words = words.map(word => {
+    // Remove punctuation from word edges for matching
+    const cleanWord = word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
+    const normalized = NORMALIZATION_MAP[cleanWord];
+    return normalized || word;
+  });
   
-  return words.join(" ");
+  // Step 3: Handle multi-word corrections (join and re-check)
+  let result = words.join(" ");
+  
+  // Common multi-word ASR mistakes
+  result = result
+    .replace(/tum\s+hee/gi, 'tum hi')
+    .replace(/hee\s+ho/gi, 'hi ho')
+    .replace(/chala\s+do/gi, 'chala do')
+    .replace(/khol\s+do/gi, 'khol do')
+    .replace(/laga\s+do/gi, 'laga do')
+    .replace(/theek\s+hai/gi, 'theek hai');
+  
+  return result;
 }

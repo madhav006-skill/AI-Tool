@@ -19,11 +19,34 @@ function stripPunctuationEdges(text) {
   return normalizeSpaces((text || '').replace(/^[\s,.;:!?-]+|[\s,.;:!?-]+$/g, ''));
 }
 
+/**
+ * Remove wake words and common fillers from text
+ * This cleans up the input before keyword extraction
+ */
 function removeWakeWord(text) {
-  // Remove leading wake word variants like: "jarvis," / "jarvis" / "जार्विस" etc.
-  return normalizeSpaces(
-    (text || '').replace(/^\s*(jarvis|जार्विस|जर्विस)\b\s*[,–-]?\s*/i, '')
-  );
+  let cleaned = (text || '');
+  
+  // Remove wake word variants (beginning of sentence)
+  cleaned = cleaned.replace(/^\s*(jarvis|jaarwis|jarwis|जार्विस|जर्विस)\b\s*[,–-]?\s*/i, '');
+  
+  // Remove common fillers/address words that don't add meaning
+  const fillers = [
+    'hello', 'helo', 'hallo',
+    'please', 'pls', 'plz',
+    'haan', 'han', 'ji',
+    'bhai', 'yaar', 'yar', 'boss',
+    'okay', 'ok', 'okey',
+    'arre', 'arey', 'are'
+  ];
+  
+  // Remove fillers only from edges (not middle of query)
+  const fillerRegexStart = new RegExp(`^\\s*(${fillers.join('|')})\\b\\s*[,]?\\s*`, 'gi');
+  const fillerRegexEnd = new RegExp(`\\s*[,]?\\s*\\b(${fillers.join('|')})\\s*$`, 'gi');
+  
+  cleaned = cleaned.replace(fillerRegexStart, '');
+  cleaned = cleaned.replace(fillerRegexEnd, '');
+  
+  return normalizeSpaces(cleaned);
 }
 
 /**

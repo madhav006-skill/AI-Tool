@@ -176,6 +176,21 @@ function App() {
       if (cmd.type === 'command' && cmd.commandName === 'youtube_play') {
         console.log('[COMMAND] YouTube detected:', cmd);
         
+        // ====================================================
+        // FIX: Open blank tab IMMEDIATELY to avoid popup block
+        // This MUST happen in direct user gesture context!
+        // ====================================================
+        let ytWindow = null;
+        try {
+          ytWindow = window.open('about:blank', '_blank');
+          if (!ytWindow) {
+            console.warn('[COMMAND] Popup blocked on initial open');
+            setError('Popup blocked! Please allow popups and try again.');
+          }
+        } catch (e) {
+          console.error('[COMMAND] Failed to open blank tab:', e);
+        }
+        
         // Build YouTube URL
         const url = buildYouTubeUrl(cmd.query);
         
@@ -194,8 +209,9 @@ function App() {
         setUserInput('');
         setRecognizedText('');
 
-        // Speak natural feedback BEFORE opening YouTube
+        // Speak natural feedback (in Hinglish if detected)
         if (voiceEnabled && voiceOutputRef.current) {
+          // IMPORTANT: Use Hindi voice for Hinglish, never English TTS for Hinglish text
           const langMode = language === 'hinglish' ? 'hi' : 'en';
           const detectedMode = language === 'hinglish' ? 'hinglish' : 'en';
           
@@ -217,11 +233,26 @@ function App() {
           }
         }
 
-        // Open YouTube after voice feedback
-        const opened = openYouTube(url);
-        if (!opened) {
-          console.warn('[COMMAND] Failed to open YouTube - popup may be blocked');
-          setError('Could not open YouTube. Please allow popups for this site.');
+        // ====================================================
+        // FIX: Now update the already-opened tab with YouTube URL
+        // This happens AFTER async TTS but tab was opened earlier
+        // ====================================================
+        if (ytWindow) {
+          try {
+            ytWindow.location.href = url;
+            console.log('[COMMAND] YouTube tab updated with URL:', url);
+          } catch (e) {
+            console.error('[COMMAND] Failed to update YouTube tab:', e);
+            // Fallback: try opening fresh (might be blocked)
+            window.open(url, '_blank');
+          }
+        } else {
+          // If initial open failed, try again (likely will be blocked)
+          console.warn('[COMMAND] Attempting fallback window.open (may be blocked)');
+          const opened = window.open(url, '_blank');
+          if (!opened) {
+            setError('Could not open YouTube. Please allow popups for this site.');
+          }
         }
 
         // Reset voice input
