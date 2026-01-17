@@ -1,0 +1,24 @@
+# Node
+**/node_modules/
+
+# Vite/React build
+jarvis-app/frontend/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Env files (DO NOT COMMIT)
+**/.env
+**/.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

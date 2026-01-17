@@ -1,0 +1,15 @@
+{
+  "name": "jarvis-app",
+  "version": "1.0.0",
+  "description": "JARVIS Voice Assistant - React + Node.js",
+  "scripts": {
+    "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "start:backend": "cd backend && node server.js",
+    "start:frontend": "cd frontend && npx vite --port 3000",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "dev": "concurrently --names \"API,WEB\" -c \"blue,green\" \"npm run start:backend\" \"npm run start:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
