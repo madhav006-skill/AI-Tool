@@ -8,6 +8,8 @@
  * }
  */
 
+import { normalizeSpeech } from '../utils/normalizeSpeech';
+
 function normalizeSpaces(text) {
   return (text || '').replace(/\s+/g, ' ').trim();
 }
@@ -70,7 +72,9 @@ function extractQuery(rawText) {
  * IMPORTANT: This function is pure and must not call backend/LLM.
  */
 export function detectYouTubeCommand(inputText) {
-  const text = normalizeSpaces(inputText);
+  // Step 1: Normalize common ASR mistakes
+  const normalized = normalizeSpeech(inputText);
+  const text = normalizeSpaces(normalized);
   if (!text) return { type: 'conversation' };
 
   // Must include YouTube token OR explicit Hindi token

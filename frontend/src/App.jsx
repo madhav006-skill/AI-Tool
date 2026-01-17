@@ -195,8 +195,8 @@ function App() {
             await voiceOutputRef.current.speak(
               cmd.query
                 ? (detectedLang === 'hinglish'
-                    ? `Theek hai, YouTube pe ${cmd.query} search kar raha hoon.`
-                    : `Okay, opening YouTube search for ${cmd.query}.`)
+                    ? `Theek hai, YouTube pe ${cmd.query} chala raha hoon.`
+                    : `Okay, playing ${cmd.query} on YouTube.`)
                 : (detectedLang === 'hinglish'
                     ? 'Theek hai, YouTube khol raha hoon.'
                     : 'Okay, opening YouTube.'),
