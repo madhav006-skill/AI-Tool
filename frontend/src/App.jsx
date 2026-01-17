@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import apiService from './services/apiService';
 import VoiceInputService from './services/voiceInputService';
 import VoiceOutputService from './services/voiceOutputService';
+import { detectYouTubeCommand, buildYouTubeUrl } from './services/commandService';
 import './styles/index.css';
 
 function App() {
@@ -167,8 +168,59 @@ function App() {
 
     try {
       setError('');
-      setIsLoading(true);
       setMicStatus(''); // Clear mic status when sending
+
+      // 1) COMMAND LAYER (YouTube only) - must NOT hit backend
+      const cmd = detectYouTubeCommand(message);
+      if (cmd.type === 'command' && cmd.commandName === 'youtube_play') {
+        const url = buildYouTubeUrl(cmd.query);
+        console.log('[COMMAND] YouTube detected:', cmd);
+        window.open(url, '_blank', 'noopener,noreferrer');
+
+        const userMsg = message;
+        const assistantMsg = cmd.query
+          ? `Opening YouTube search for: ${cmd.query}`
+          : 'Opening YouTube.';
+
+        const updatedHistory = [...conversationHistory, { user: userMsg, assistant: assistantMsg }];
+        setConversationHistory(updatedHistory);
+        setUserInput('');
+        setRecognizedText('');
+
+        if (voiceEnabled && voiceOutputRef.current) {
+          // For Hinglish voice, keep hi-IN; for English keep en-US
+          const langMode = detectedLang === 'hinglish' ? 'hi' : 'en';
+          const detectedMode = detectedLang === 'hinglish' ? 'hinglish' : 'en';
+          try {
+            await voiceOutputRef.current.speak(
+              cmd.query
+                ? (detectedLang === 'hinglish'
+                    ? `Theek hai, YouTube pe ${cmd.query} search kar raha hoon.`
+                    : `Okay, opening YouTube search for ${cmd.query}.`)
+                : (detectedLang === 'hinglish'
+                    ? 'Theek hai, YouTube khol raha hoon.'
+                    : 'Okay, opening YouTube.'),
+              langMode,
+              { detectedLanguage: detectedMode, emotion: 'calm', emotionIntensity: 'low' }
+            );
+          } catch (err) {
+            console.error('[COMMAND] TTS error:', err);
+          } finally {
+            if (voiceInputRef.current && voiceInputRef.current.resetAfterResponse) {
+              voiceInputRef.current.resetAfterResponse();
+            }
+          }
+        } else {
+          if (voiceInputRef.current && voiceInputRef.current.resetAfterResponse) {
+            voiceInputRef.current.resetAfterResponse();
+          }
+        }
+
+        return; // IMPORTANT: do not send command to backend
+      }
+
+      // 2) Normal conversation flow
+      setIsLoading(true);
 
       // Add user message to history
       const updatedHistory = [...conversationHistory];
