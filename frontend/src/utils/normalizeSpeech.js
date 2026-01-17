@@ -161,6 +161,32 @@ const NORMALIZATION_MAP = {
 };
 
 /**
+ * Minimal Hinglish/ASR normalization requested by the product spec.
+ * Use this BEFORE intent detection and keyword extraction.
+ */
+export function normalizeHinglish(text = "") {
+  const map = {
+    ple: "play",
+    myoujik: "music",
+    sng: "song",
+    yutub: "youtube",
+    jaarwis: "jarvis",
+    helo: "hello"
+  };
+
+  return (text || "")
+    .toLowerCase()
+    .split(/\s+/)
+    .map((word) => {
+      const cleanWord = word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
+      return map[cleanWord] || cleanWord;
+    })
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
  * Normalize ASR output to fix common spelling mistakes
  * MUST be called BEFORE intent detection and keyword extraction
  * @param {string} text - Raw ASR output
@@ -168,20 +194,24 @@ const NORMALIZATION_MAP = {
  */
 export function normalizeSpeech(text = "") {
   if (!text || typeof text !== 'string') return "";
-  
+
+  // Step 0: Apply required Hinglish normalization first
+  const base = normalizeHinglish(text);
+
   // Step 1: Lowercase and split
-  let words = text.toLowerCase().split(/\s+/);
+  let words = base.toLowerCase().split(/\s+/);
   
   // Step 2: Apply word-level normalization
   words = words.map(word => {
     // Remove punctuation from word edges for matching
     const cleanWord = word.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '');
     const normalized = NORMALIZATION_MAP[cleanWord];
-    return normalized || word;
+    // Prefer normalized token; otherwise keep cleaned token (avoids carrying punctuation/noise)
+    return normalized || cleanWord;
   });
   
   // Step 3: Handle multi-word corrections (join and re-check)
-  let result = words.join(" ");
+  let result = words.join(" ").replace(/\s+/g, " ").trim();
   
   // Common multi-word ASR mistakes
   result = result

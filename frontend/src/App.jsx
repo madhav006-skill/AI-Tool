@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import apiService from './services/apiService';
+import apiService, { fixSpellingAPI } from './services/apiService';
 import VoiceInputService from './services/voiceInputService';
 import VoiceOutputService from './services/voiceOutputService';
 import { detectYouTubeCommand, buildYouTubeUrl } from './services/commandService';
 import { getYouTubeVoiceFeedback, openYouTube } from './utils/youtubeHandler';
+import { normalizeCommand } from './utils/commandNormalizer';
 import './styles/index.css';
 
 function App() {
@@ -26,6 +27,33 @@ function App() {
   const voiceInputRef = useRef(null);
   const voiceOutputRef = useRef(null);
   const historyEndRef = useRef(null);
+  const preopenedYouTubeWindowRef = useRef(null);
+
+  /**
+   * EXACT PIPELINE: Raw ASR → normalizeCommand → backend spellFix → Final text
+   */
+  const processVoiceText = async (finalTranscript) => {
+    try {
+      // 1️⃣ Normalize ASR noise (deterministic frontend)
+      const normalized = normalizeCommand(finalTranscript);
+      console.log('[PIPELINE] Normalized:', normalized);
+
+      // 2️⃣ AI spelling correction (backend, no translation)
+      const corrected = await fixSpellingAPI(normalized);
+      console.log('[PIPELINE] Spell-corrected:', corrected);
+
+      // 3️⃣ AB final text set karo
+      setRecognizedText(corrected);
+
+      return corrected;
+    } catch (error) {
+      console.error('[PIPELINE] Error processing voice text:', error);
+      // Fallback: return normalized at minimum
+      const normalized = normalizeCommand(finalTranscript);
+      setRecognizedText(normalized);
+      return normalized;
+    }
+  };
 
   // Initialize voice services
   useEffect(() => {
@@ -107,17 +135,20 @@ function App() {
       };
       
       // Finalized after 2 seconds of silence (with language detection)
-      voiceInputRef.current.onEnd = (finalText, detectedLang) => {
+      voiceInputRef.current.onEnd = async (finalText, detectedLang) => {
         setIsListening(false);
         setMicStatus('✅ Processing...');
-        console.log('[APP] Final text:', finalText);
+        console.log('[APP] Raw ASR text:', finalText);
         console.log('[APP] Detected language:', detectedLang);
         
         // Update language hint for backend
         setCurrentLanguage(detectedLang === 'hinglish' ? 'hinglish' : 'en');
         
         if (finalText && !isLoading) {
-          handleSendMessage(finalText, detectedLang);
+          // 🔥 EXACT PIPELINE: normalize → spell-fix → use corrected text
+          const cleanText = await processVoiceText(finalText);
+          console.log('[APP] Final text:', cleanText);
+          handleSendMessage(cleanText, detectedLang);
         }
       };
       
@@ -171,36 +202,59 @@ function App() {
       setError('');
       setMicStatus(''); // Clear mic status when sending
 
-      // 1) COMMAND LAYER (YouTube only) - must NOT hit backend
-      const cmd = detectYouTubeCommand(message);
-      if (cmd.type === 'command' && cmd.commandName === 'youtube_play') {
-        console.log('[COMMAND] YouTube detected:', cmd);
+      // 1) Normalize raw ASR text (deterministic, no translation)
+      const normalizedText = normalizeCommand(message);
+
+      // 2) Backend spelling fix + deterministic intent detection
+      let backendIntent = null;
+      try {
+        backendIntent = await apiService.parseIntent(normalizedText);
+      } catch (e) {
+        console.warn('[COMMAND] parseIntent failed; falling back to local detection');
+      }
+
+      const intent = backendIntent?.intent;
+      const correctedText = backendIntent?.correctedText || normalizedText;
+
+      // Fallback: local detection if backend is unavailable
+      const cmd = detectYouTubeCommand(correctedText);
+
+      const isYouTubePlay =
+        (intent && intent.type === 'YOUTUBE_PLAY') ||
+        (cmd.type === 'command' && cmd.commandName === 'youtube_play');
+
+      const youtubeQuery = (intent && intent.type === 'YOUTUBE_PLAY')
+        ? (intent.query || '')
+        : (cmd.query || '');
+
+      if (isYouTubePlay) {
+        console.log('[COMMAND] YouTube detected:', { intent, cmd, correctedText });
         
-        // ====================================================
-        // FIX: Open blank tab IMMEDIATELY to avoid popup block
-        // This MUST happen in direct user gesture context!
-        // ====================================================
+        // ✅ USER COMMAND CONFIRMED — NOW OPEN TAB (popup-safe)
         let ytWindow = null;
         try {
           ytWindow = window.open('about:blank', '_blank');
           if (!ytWindow) {
-            console.warn('[COMMAND] Popup blocked on initial open');
+            console.warn('[COMMAND] Popup blocked');
             setError('Popup blocked! Please allow popups and try again.');
           }
         } catch (e) {
           console.error('[COMMAND] Failed to open blank tab:', e);
         }
+
+        // Query is already spelling-corrected by backend intent parser.
+        const correctedQuery = youtubeQuery;
         
         // Build YouTube URL
-        const url = buildYouTubeUrl(cmd.query);
+        const url = buildYouTubeUrl(correctedQuery);
         
         // Get natural voice feedback based on language
         const language = cmd.language || detectedLang || 'en';
-        const voiceFeedback = getYouTubeVoiceFeedback(cmd.query, language);
+        const voiceFeedback = getYouTubeVoiceFeedback(correctedQuery, language);
         
         // Add to conversation history
         const userMsg = message;
-        const assistantMsg = cmd.query
+        const assistantMsg = correctedQuery
           ? `🎵 ${voiceFeedback}`
           : (language === 'hinglish' ? '🎵 YouTube khol raha hoon' : '🎵 Opening YouTube');
 
@@ -233,32 +287,17 @@ function App() {
           }
         }
 
-        // ====================================================
-        // FIX: Now update the already-opened tab with YouTube URL
-        // This happens AFTER async TTS but tab was opened earlier
-        // ====================================================
-        if (ytWindow) {
-          try {
-            ytWindow.location.href = url;
-            console.log('[COMMAND] YouTube tab updated with URL:', url);
-          } catch (e) {
-            console.error('[COMMAND] Failed to update YouTube tab:', e);
-            // Fallback: try opening fresh (might be blocked)
-            window.open(url, '_blank');
+        // ✅ REDIRECT AFTER SMALL DELAY (300ms after opening blank tab)
+        setTimeout(() => {
+          if (ytWindow) {
+            try {
+              ytWindow.location.href = url;
+              console.log('[COMMAND] YouTube tab redirected to:', url);
+            } catch (e) {
+              console.error('[COMMAND] Failed to redirect tab:', e);
+            }
           }
-        } else {
-          // If initial open failed, try again (likely will be blocked)
-          console.warn('[COMMAND] Attempting fallback window.open (may be blocked)');
-          const opened = window.open(url, '_blank');
-          if (!opened) {
-            setError('Could not open YouTube. Please allow popups for this site.');
-          }
-        }
-
-        // Reset voice input
-        if (voiceInputRef.current && voiceInputRef.current.resetAfterResponse) {
-          voiceInputRef.current.resetAfterResponse();
-        }
+        }, 300);
 
         return; // IMPORTANT: do not send command to backend
       }

@@ -83,6 +83,70 @@ export const apiService = {
       throw error;
     }
   }
+  ,
+
+  /**
+   * Spelling-only correction (no translation)
+   */
+  async spellCorrect(text) {
+    try {
+      const response = await fetch(`${API_BASE}/api/spell-correct`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[API] Error spell-correct:', error);
+      throw error;
+    }
+  }
+
+  ,
+
+  /**
+   * Parse intent using backend (spelling-only correction + deterministic intent).
+   */
+  async parseIntent(text) {
+    try {
+      const response = await fetch(`${API_BASE}/api/intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ text })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[API] Error parse-intent:', error);
+      throw error;
+    }
+  }
 };
+
+/**
+ * Wrapper for spelling-only correction (matches user-requested API name)
+ */
+export async function fixSpellingAPI(text) {
+  try {
+    const result = await apiService.spellCorrect(text);
+    return result?.corrected || text;
+  } catch (error) {
+    console.warn('[API] fixSpellingAPI failed, returning original text');
+    return text;
+  }
+}
 
 export default apiService;

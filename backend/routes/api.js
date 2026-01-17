@@ -13,6 +13,8 @@ import {
   resetConversationLanguage 
 } from '../services/languageService.js';
 import { getChatResponse } from '../services/llmService.js';
+import { spellCorrectText } from '../services/llmService.js';
+import { parseIntentController } from '../controller.js';
 
 const router = express.Router();
 
@@ -161,5 +163,30 @@ router.post('/check-task', (req, res) => {
     res.status(500).json({ error: 'Failed to check task' });
   }
 });
+
+/**
+ * POST /api/spell-correct
+ * Spelling-only correction for ASR text (no translation).
+ */
+router.post('/spell-correct', async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'text is required' });
+    }
+
+    const corrected = await spellCorrectText(text);
+    res.json({ corrected });
+  } catch (error) {
+    console.error('[API] Error spell-correct:', error);
+    res.status(500).json({ error: 'Failed to spell-correct text' });
+  }
+});
+
+/**
+ * POST /api/intent
+ * Runs spelling-only correction + deterministic intent parsing.
+ */
+router.post('/intent', parseIntentController);
 
 export default router;

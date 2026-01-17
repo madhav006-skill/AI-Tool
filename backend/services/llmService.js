@@ -21,6 +21,8 @@ const client = new Groq({
   apiKey: apiKey
 });
 
+const SPELLING_CACHE = new Map();
+
 /**
  * PROMPTS 1-7: System prompts with STRICT language mirroring rules
  * Three distinct language modes:
@@ -169,6 +171,75 @@ export async function getChatResponse(topic, language, conversationMemory) {
   } catch (error) {
     console.error('[LLM] Error:', error);
     throw error;
+  }
+}
+
+/**
+ * Spelling-only correction for noisy ASR text.
+ * - Does NOT translate
+ * - Minimal edits (names like "arijit sinh" -> "arijit singh")
+ * - Deterministic-ish: temperature 0 + caching
+ */
+export async function spellCorrectText(inputText) {
+  const original = (inputText || '').trim();
+  if (!original) return '';
+
+  if (SPELLING_CACHE.has(original)) {
+    return SPELLING_CACHE.get(original);
+  }
+
+  const inputHasDevanagari = /[\u0900-\u097F]/.test(original);
+
+  const systemPrompt = `You are a spelling correction engine.
+
+TASK:
+- Correct spelling mistakes in the given text (especially proper nouns like singer names).
+- DO NOT translate.
+- DO NOT change the language.
+- DO NOT add extra words.
+- Keep the same word order; only fix spelling.
+
+OUTPUT RULES:
+- Output ONLY the corrected text.
+- No quotes, no markdown, no explanations.`;
+
+  const userPrompt = `Text: ${original}`;
+
+  try {
+    const message = await client.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0,
+      max_tokens: 80
+    });
+
+    let corrected = (message.choices?.[0]?.message?.content || '').trim();
+    corrected = corrected
+      .replace(/^['"\s]+|['"\s]+$/g, '')
+      .replace(/```[\s\S]*?```/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    // Basic safety: prevent script/language drift
+    const correctedHasDevanagari = /[\u0900-\u097F]/.test(corrected);
+    if (!inputHasDevanagari && correctedHasDevanagari) {
+      corrected = original;
+    }
+
+    // Prevent runaway outputs
+    if (!corrected || corrected.length > Math.max(120, original.length * 2)) {
+      corrected = original;
+    }
+
+    SPELLING_CACHE.set(original, corrected);
+    return corrected;
+  } catch (error) {
+    console.error('[LLM] Spelling correction error:', error);
+    SPELLING_CACHE.set(original, original);
+    return original;
   }
 }
 
